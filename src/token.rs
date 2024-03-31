@@ -437,3 +437,15 @@ impl Into<&str> for Escaped {
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use quickcheck::Arbitrary;
+
+    impl Arbitrary for Token {
+        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+            Self::new(String::arbitrary(g))
+        }
+    }
+}

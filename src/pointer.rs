@@ -1183,11 +1183,33 @@ struct Resolved<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{Resolve, ResolveMut};
+    use quickcheck::{Arbitrary, TestResult};
+    use quickcheck_macros::quickcheck;
     use serde_json::json;
 
-    use crate::{Resolve, ResolveMut};
+    impl Arbitrary for Pointer {
+        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+            Self::new(
+                (0..g.size())
+                    .map(|_| Token::arbitrary(g))
+                    .collect::<Vec<_>>(),
+            )
+        }
 
-    use super::*;
+        fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+            let tokens: Vec<_> = self.tokens().collect();
+            Box::new((0..self.count()).map(move |i| {
+                let sub_tokens: Vec<_> = tokens
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(j, t)| (i != j).then_some(t.clone()))
+                    .collect();
+                Self::new(sub_tokens)
+            }))
+        }
+    }
 
     #[test]
     fn test_rfc_examples() {
@@ -1890,5 +1912,33 @@ mod tests {
         let uri = fluent_uri::Uri::parse("#/foo/bar").unwrap();
         let ptr = Pointer::try_from(&uri).unwrap();
         assert_eq!(ptr, "/foo/bar");
+    }
+
+    #[quickcheck]
+    fn pop_and_push(mut ptr: Pointer) -> TestResult {
+        let original_ptr = ptr.clone();
+        let mut tokens = Vec::with_capacity(ptr.count());
+        while let Some(token) = ptr.pop_back() {
+            tokens.push(token);
+        }
+        if ptr.count() != 0 || !ptr.is_root() {
+            return TestResult::failed();
+        }
+        for token in tokens.drain(..) {
+            ptr.push_front(token);
+        }
+        if ptr != original_ptr {
+            return TestResult::failed();
+        }
+        while let Some(token) = ptr.pop_front() {
+            tokens.push(token);
+        }
+        if ptr.count() != 0 || !ptr.is_root() {
+            return TestResult::failed();
+        }
+        for token in tokens {
+            ptr.push_back(token);
+        }
+        TestResult::from_bool(ptr == original_ptr)
     }
 }
